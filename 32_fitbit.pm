@@ -1,5 +1,5 @@
 ##############################################################################
-# $Id: 32_fitbit.pm 
+# $Id: 32_fitbit.pm
 #
 #  32_fitbit.pm
 #
@@ -9,8 +9,13 @@
 #  https://forum.fhem.de/index.php/topic,73285
 #
 # ToDo:
-# 
+#
 ##############################################################################
+# Release 05 / 2019-03-10
+# Fixed sleep values. Fitbit api was changed and sleep level were renamed.
+# Module is now using the updated sleep levels. This causes the readings to have new names as well...
+# Added support for heart rate. Module is reading summary of today as well as the values of previous day.
+#
 # Modification Strategy / 2019-03-09
 # Added attribute createFriends - by default friends are no longer created
 # Added attribute createDevices - by default devices are created but creation can be disabled.
@@ -73,18 +78,18 @@ sub fitbit_Initialize($) {
 sub fitbit_Define($$) {
   my ($hash, $def) = @_;
   Log3 "fitbit", 3, "fitbit_Define() ".$def;
-  
+
   my @a = split("[ \t][ \t]*", $def);
 
   my $subtype;
   my $name = $a[0];
-  
+
   if( $a[2] eq "ACCOUNT" && @a == 4) {
     Log3 $name, 4, "$name: Define an account";
     my $tokenClear = $a[3];
     $subtype = "ACCOUNT";
     my $token = fitbit_encrypt($tokenClear);
-    
+
     Log3 $name, 3, "$name: encrypt $tokenClear to $token" if($tokenClear ne $token);
     $hash->{DEF} = "ACCOUNT $token";
     $hash->{Clients} = ":fitbit:";
@@ -93,7 +98,7 @@ sub fitbit_Define($$) {
   else {
     return "Usage: define <name> fitbit ACCOUNT <OAuth 2.0 token>"  if(@a < 3 || @a > 4);
   }
-  
+
   if( $a[2] eq "DEVICE" && @a == 4 ) {
     Log3 $name, 4, "$name: Define an DEVICE";
     $subtype = "DEVICE";
@@ -110,7 +115,7 @@ sub fitbit_Define($$) {
   else {
     return "Usage: define <name> fitbit DEVICE <Device ID>"  if(@a < 3 || @a > 4);
   }
-  
+
   if( $a[2] eq "USER" && @a == 4 ) {
     Log3 $name, 4, "$name: Define an USER";
     $subtype = "USER";
@@ -128,7 +133,7 @@ sub fitbit_Define($$) {
   else {
     return "Usage: define <name> fitbit USER <User ID>"  if(@a < 3 || @a > 4);
   }
-  
+
   if( $a[2] eq "FRIEND" && @a == 4 ) {
     Log3 $name, 4, "$name: Define an FRIEND";
     $subtype = "FRIEND";
@@ -157,7 +162,7 @@ sub fitbit_Define($$) {
     InternalTimer( gettimeofday() + 900, "fitbit_InitWait", $hash, 0);
     return undef;
   }
-  
+
   readingsSingleUpdate($hash, "state", "Initialized", 1);
 
   # is FHEM finished with initialize?
@@ -277,7 +282,7 @@ sub fitbit_Set($$@) {
   my ( $hash, $name, $cmd, @arg ) = @_;
   my $list="";
   Log3 $name, 4, "$name fitbit_Set()";
-    
+
   if( $hash->{SUBTYPE} eq "ACCOUNT") {
     $list = "getFriends:noArg setWeight setFat";
     if($cmd eq "getFriends") {
@@ -285,10 +290,10 @@ sub fitbit_Set($$@) {
         if( !defined( $attr{$name}{createFriends} ) ||  $attr{$name}{createFriends} eq '0' ) {
           return 'Cannot get friends. Please set attribute createFriends to 1 before executing function.';
         }
-      
+
       my $friends = fitbit_getFriends($hash);
-      
-      
+
+
       Log3 $name, 5, "$name: fitbit_Set JSON Dump ".Dumper($friends);
       foreach my $friend (@{$friends}) {
         Log3 $name, 5, "$name: fitbit_Set JSON Dump foreach ".Dumper($friend);
@@ -311,36 +316,36 @@ sub fitbit_Set($$@) {
           $cmdret= CommandAttr(undef,"$devname IODev $name");
         }
       }
-  
+
     }
-    
+
     if($cmd eq "setWeight") {
       return "logged weight data with log-id " . fitbit_setWeight($hash, $arg[0]);
     }
-    
+
     if($cmd eq "setFat") {
       return "logged fat data with log-id " . fitbit_setFat($hash, $arg[0]);
     }
-    
+
     else {
-      return "Unknown argument $cmd, choose one of $list"; 
+      return "Unknown argument $cmd, choose one of $list";
     }
-    
-    
+
+
   }
   elsif( $hash->{SUBTYPE} eq "USER") {
-    
+
   }
   elsif( $hash->{SUBTYPE} eq "FRIEND") {
-    
+
   }
   elsif( $hash->{SUBTYPE} eq "DEVICE") {
-    
+
   }
   else {
-  
+
   }
-  
+
 }
 
 #Used by Subtype: ACCOUNT, USER, DEVICE, FRIEND
@@ -418,14 +423,14 @@ sub fitbit_isDNS() {
     Log3 "fitbit", 1, "fitbit_isDNS(): Failed to resolve www.fitbit.com";
     return undef;
   }
-  
+
   $resolve = inet_aton("api.fitbit.com");
   if(!defined($resolve))
   {
     Log3 "fitbit", 1, "fitbit_isDNS(): Failed to resolve api.fitbit.com";
 	return undef;
   }
-  return "ok";  
+  return "ok";
 }
 
 # Used by Subtype: ACCOUNT, DEVICE, USER
@@ -497,12 +502,12 @@ sub fitbit_connect($;$) {
       $autocreated++;
     }
   }
-    
+
   #Add friends
-  
- 
-  
-  
+
+
+
+
   my $friends = fitbit_getFriends($hash);
   Log3 $name, 5, "$name: fitbit_connect JSON Dump ".Dumper($friends);
   foreach my $friend (@{$friends}) {
@@ -528,10 +533,10 @@ sub fitbit_connect($;$) {
       $autocreated++;
     }
   }
- 
- 
+
+
   #add devices
- 
+
   my $devices = fitbit_getDevices($hash);
   foreach my $device (@{$devices}) {
     if( defined($modules{$hash->{TYPE}}{defptr}{"D$device->{id}"}) ) {
@@ -767,7 +772,7 @@ sub fitbit_getFriends($) {
   });
 
   return undef if(!defined($data));
-  
+
   #simulate JSON example
   #$data = '{"friends":[{"user":{"aboutMe":"I live in San Francisco.","avatar":"http://www.fitbit.com/images/profile/defaultProfile_100_male.gif","city":"San Francisco","country":"US","dateOfBirth":"1970-02-18","displayName":"Nick","encodedId":"257V3V","fullName":"Fitbit","gender":"MALE","height":176.7,"offsetFromUTCMillis":25200000,"state":"CA","strideLengthRunning":0,"strideLengthWalking":0,"timezone":"America/Los_Angeles","weight":80.5}},{"user":{"aboutMe":"","avatar":"http://www.fitbit.com/images/profile/defaultProfile_100_male.gif","city":"","country":"","dateOfBirth":"","displayName":"Fitbit U.","encodedId":"2246K9","fullName":"Fitbit User","gender":"NA","height":190.7,"offsetFromUTCMillis":14400000,"state":"","strideLengthRunning":0,"strideLengthWalking":0,"timezone":"Europe/Moscow","weight":0}}]}';
 
@@ -777,10 +782,10 @@ sub fitbit_getFriends($) {
     Log3 $name, 2, "$name: json evaluation error on fitbit_getFriends ".$@;
     return undef;
   }
-  
+
   Log3 $name, 5, "$name: fitbit_getFriends JSON Dump ".Dumper($json);
   return undef if(defined(fitbit_parseJsonForError($hash, $json)));
-  
+
   my @users = ();
   foreach my $user (@{$json->{friends}}) {
     #Log3 $name, 5, "$name: fitbit_getFriends JSON Dump foreach ".Dumper($user);
@@ -808,14 +813,14 @@ sub fitbit_getUsers($) {
   });
 
   return undef if(!defined($data));
-  
-  
+
+
   my $json = eval { JSON->new->utf8(0)->decode($data) };
   if($@) {
     Log3 $name, 2, "$name: json evaluation error on getUsers ".$@;
     return undef;
   }
-  
+
   Log3 $name, 5, "$name: getUsers JSON Dump ".Dumper($json);
   #xToDo: Fehlerabfangen, wenn Fitbit API mit Error antwortet!
   return undef if(defined(fitbit_parseJsonForError($hash, $json)));
@@ -835,7 +840,7 @@ sub fitbit_getDevices($) {
   my $name = $hash->{NAME};
 
 
-  if( defined( $attr{$name}{createDevices} ) &&  $attr{$name}{createDevices} eq '0' ) { 
+  if( defined( $attr{$name}{createDevices} ) &&  $attr{$name}{createDevices} eq '0' ) {
 	Log3 $name, 4, "$name: fitbit_getDevices Skipped loading devices as attribute 'createDevices' is set to 0";
     return undef;
   }
@@ -850,7 +855,7 @@ sub fitbit_getDevices($) {
     noshutdown => 1,
     header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
   });
-  
+
   return undef if(!defined($data));
 
   my $json = eval { JSON->new->utf8(0)->decode($data) };
@@ -861,9 +866,9 @@ sub fitbit_getDevices($) {
   Log3 $name, 5, "$name: fitbit_getDevices JSON Dump ".Dumper($json);
   #xToDo: Fehlerabfangen, wenn Fitbit API mit Error antwortet!
   return undef if(defined(fitbit_parseJsonForError($hash, $json)));
-  
-  
-  
+
+
+
 
   my @devices = ();
   foreach my $item (@$json) {
@@ -880,10 +885,10 @@ sub fitbit_getDeviceDetail($) {
   my ($hash) = @_;
   my $name = $hash->{NAME};
   my $deviceID = $hash->{DEVICEID};
-    
+
   Log3 $name, 4, "$name: fitbit_getDeviceDetail() ".$hash->{DEVICEID};
   return undef if( !defined($hash->{IODev}) );
-  
+
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getDeviceDetail(): Use token from I/O Dev $hash->{IODev}->{NAME}";
 
@@ -905,9 +910,9 @@ sub fitbit_getDeviceDetail($) {
   }
   Log3 $name, 5, "$name: fitbit_getDeviceDetail JSON Dump: ".Dumper($json);
   return undef if(defined(fitbit_parseJsonForError($hash, $json)));
-  
+
   Log3 $name, 5, "$name: fitbit_getDeviceDetail(): Looking for DeviceID $deviceID ";
-  
+
   #Look for the right device. JSON could have more than one device if there are more devices connected to account.
   my @devices = ();
   foreach my $item (@$json) {
@@ -932,11 +937,11 @@ sub fitbit_setWeight($$) {
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
   $year = $year+1900;
   $mon = $mon+1;
-  
+
   my $params = "weight=$weight&date=$year-$mon-$mday&time=$hour:$min:$sec";
   my $url = "https://api.fitbit.com/1/user/-/body/log/weight.json/";
- 
-  Log3 $name, 4, "$name: fitbit_setWeight() - Sending data to fitbit web api.";  
+
+  Log3 $name, 4, "$name: fitbit_setWeight() - Sending data to fitbit web api.";
   Log3 $name, 4, "FHEM -> fitbit URL: " . $url;
   Log3 $name, 4, "FHEM -> fitbit Params: " . $params;
 
@@ -964,7 +969,7 @@ sub fitbit_setWeight($$) {
 	Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
 
-    return $d->{weightLog}->{logId};  
+    return $d->{weightLog}->{logId};
 
 }
 
@@ -981,11 +986,11 @@ sub fitbit_setFat($$) {
   my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
   $year = $year+1900;
   $mon = $mon+1;
-  
+
   my $params = "fat=$fat&date=$year-$mon-$mday&time=$hour:$min:$sec";
   my $url = "https://api.fitbit.com/1/user/-/body/log/fat.json/";
- 
-  Log3 $name, 4, "$name: fitbit_setFat() - Sending data to fitbit web api.";  
+
+  Log3 $name, 4, "$name: fitbit_setFat() - Sending data to fitbit web api.";
   Log3 $name, 4, "FHEM -> fitbit URL: " . $url;
   Log3 $name, 4, "FHEM -> fitbit Params: " . $params;
 
@@ -1013,7 +1018,7 @@ sub fitbit_setFat($$) {
 	Log3 $name, 5, 'Decoded: ' . Dumper($d);
 
 
-    return $d->{fatLog}->{logId};  
+    return $d->{fatLog}->{logId};
 
 }
 
@@ -1028,10 +1033,10 @@ sub fitbit_getFriendDetail($) {
   return undef if( !defined($hash->{USERID}) );
   return undef if( $hash->{SUBTYPE} ne "FRIEND" );
   return undef if( !defined($hash->{IODev}));
-  
+
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getFriendDetail(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+
   #ToDo: Nonblocking
   my ($err,$data) = HttpUtils_BlockingGet({
     url => "https://api.fitbit.com/1/user/-/friends.json",
@@ -1039,29 +1044,29 @@ sub fitbit_getFriendDetail($) {
     noshutdown => 1,
     header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
   });
-  
+
   #simulate JSON data example
   #$data = '{"friends":[{"user":{"aboutMe":"I live in San Francisco.","avatar":"http://www.fitbit.com/images/profile/defaultProfile_100_male.gif","city":"San Francisco","country":"US","dateOfBirth":"1970-02-18","displayName":"Nick","encodedId":"257V3V","fullName":"Fitbit","gender":"MALE","height":176.7,"offsetFromUTCMillis":25200000,"state":"CA","strideLengthRunning":0,"strideLengthWalking":0,"timezone":"America/Los_Angeles","weight":80.5}},{"user":{"aboutMe":"","avatar":"http://www.fitbit.com/images/profile/defaultProfile_100_male.gif","city":"","country":"","dateOfBirth":"","displayName":"Fitbit U.","encodedId":"2246K9","fullName":"Fitbit User","gender":"NA","height":190.7,"offsetFromUTCMillis":14400000,"state":"","strideLengthRunning":0,"strideLengthWalking":0,"timezone":"Europe/Moscow","weight":0}}]}';
 
   Log3 $name, 5, "$name: fitbit_getFriendDetail: HTTP Dump: ".Dumper($data);
   return undef if(!defined($data));
-  
+
   my $json = eval { JSON->new->utf8(0)->decode($data) };
   if($@) {
     Log3 $name, 2, "$name: json evaluation error on getUserDetail ".$@;
     return undef;
   }
-  
+
   Log3 $name, 5, "$name: fitbit_getFriendDetail JSON Dump: ".Dumper($json);
   return undef if(defined(fitbit_parseJsonForError($hash, $json)));
-  
+
   #Look for the right friend. JSON response could have more than one friend
   foreach my $item (@{$json->{friends}}) {
     Log3 $name, 5, "$name: fitbit_getFriendDetail JSON Dump foreach: ".Dumper($item);
     Log3 $name, 5, "$name: fitbit_getFriendDetail Found UserID $userID in Item $item->{user}->{encodedId}" if($item->{user}->{encodedId} eq $userID);
     return $item->{user} if($item->{user}->{encodedId} eq $userID);
   }
-  
+
   return undef;
 }
 
@@ -1074,10 +1079,10 @@ sub fitbit_getUserDetail($) {
   return undef if( !defined($hash->{USERID}) );
   return undef if( $hash->{SUBTYPE} ne "USER" );
   return undef if( !defined($hash->{IODev}));
-  
+
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getUserDetail(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+
   #ToDo: Nonblocking
   my ($err,$data) = HttpUtils_BlockingGet({
     url => "https://api.fitbit.com/1/user/-/profile.json",
@@ -1088,13 +1093,13 @@ sub fitbit_getUserDetail($) {
 
   Log3 $name, 5, "$name: fitbit_getUserDetail: HTTP Dump: ".Dumper($data);
   return undef if(!defined($data));
-  
+
   my $json = eval { JSON->new->utf8(0)->decode($data) };
   if($@) {
     Log3 $name, 2, "$name: json evaluation error on getUserDetail ".$@;
     return undef;
   }
-  
+
   Log3 $name, 5, "$name: fitbit_getUserDetail JSON Dump: ".Dumper($json);
   return undef if(defined(fitbit_parseJsonForError($hash, $json)));
 
@@ -1186,7 +1191,7 @@ sub fitbit_poll($;$) {
   elsif( $hash->{SUBTYPE} eq "FRIEND" ) {
     my $interval = AttrVal($name,"interval",900);
     my $lastData = ReadingsVal( $name, ".poll", 0 );
-	
+
 	fitbit_getDataFromLeaderboard($hash) if($force || $lastData <= ($now - $interval));
   }
   elsif( $hash->{SUBTYPE} eq "USER" ) {
@@ -1198,6 +1203,7 @@ sub fitbit_poll($;$) {
     fitbit_getUserWeight($hash) if($force || $lastData <= ($now - $interval));
     fitbit_getSleepGoals($hash) if($force || $lastData <= ($now - $interval));
     fitbit_getSleepLog($hash) if($force || $lastData <= ($now - $interval));
+    fitbit_getActivityHeartRate($hash) if($force || $lastData <= ($now - $interval));
   }
   else {
     Log3 $name, 1, "$name: fitbit_poll(): Unexpected error. Unknown Subtype '$hash->{SUBTYPE}'...";
@@ -1211,13 +1217,13 @@ sub fitbit_getSleepLog($) {
   my ($hash) = @_;
   my $name = $hash->{NAME};
   my $userID = $hash->{USERID};
-  
+
   Log3 $name, 5, "$name: fitbit_getSleepLog() ".$hash->{USERID};
   return undef if( !defined($hash->{IODev}) );
 
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getSleepLog(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+
   my $now = substr(TimeNow(),0,10);
   HttpUtils_NonblockingGet({
     url => "https://api.fitbit.com/1.2/user/-/sleep/date/$now.json",
@@ -1228,52 +1234,84 @@ sub fitbit_getSleepLog($) {
     type => 'sleepLog',
     callback => \&fitbit_Dispatch,
   });
-   
+
   $hash->{LAST_POLL} = TimeNow();
   readingsSingleUpdate( $hash, ".poll", gettimeofday(), 0 );
   return undef;
 }
 
 #Used by Subtype: USER
-sub fitbit_getSleepGoals($) {
+sub fitbit_getActivityHeartRate($) {
   my ($hash) = @_;
   my $name = $hash->{NAME};
   my $userID = $hash->{USERID};
-  
-  Log3 $name, 4, "$name: fitbit_getSleepGoals() ".$hash->{USERID};
+
+  Log3 $name, 4, "$name: fitbit_getActivityHeartRate() ".$hash->{USERID};
   return undef if( !defined($hash->{IODev}) );
 
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
-  Log3 $name, 5, "$name: fitbit_getSleepGoals(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+  Log3 $name, 5, "$name: fitbit_getActivityHeartRate(): Use token from I/O Dev $hash->{IODev}->{NAME}";
+
   my $now = substr(TimeNow(),0,10);
   HttpUtils_NonblockingGet({
-    url => "https://api.fitbit.com/1/user/-/sleep/goal.json",
+    url => "https://api.fitbit.com/1/user/-/activities/heart/date/today/7d.json",
     timeout => 30,
     noshutdown => 1,
     header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
     hash => $hash,
-    type => 'sleepGoals',
+    type => 'activity7d',
     callback => \&fitbit_Dispatch,
   });
-   
+
   $hash->{LAST_POLL} = TimeNow();
   readingsSingleUpdate( $hash, ".poll", gettimeofday(), 0 );
   return undef;
 }
+
+
+#Used by Subtype: USER
+sub fitbit_getSleepLog($) {
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+  my $userID = $hash->{USERID};
+
+  Log3 $name, 5, "$name: fitbit_getSleepLog() ".$hash->{USERID};
+  return undef if( !defined($hash->{IODev}) );
+
+  my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
+  Log3 $name, 5, "$name: fitbit_getSleepLog(): Use token from I/O Dev $hash->{IODev}->{NAME}";
+
+  my $now = substr(TimeNow(),0,10);
+  HttpUtils_NonblockingGet({
+    url => "https://api.fitbit.com/1.2/user/-/sleep/date/$now.json",
+    timeout => 30,
+    noshutdown => 1,
+    header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
+    hash => $hash,
+    type => 'sleepLog',
+    callback => \&fitbit_Dispatch,
+  });
+
+  $hash->{LAST_POLL} = TimeNow();
+  readingsSingleUpdate( $hash, ".poll", gettimeofday(), 0 );
+  return undef;
+}
+
+
+
 
 #Used by Subtype: FRIEND
 sub fitbit_getDataFromLeaderboard($) {
   my ($hash) = @_;
   my $name = $hash->{NAME};
   my $userID = $hash->{USERID};
-  
+
   Log3 $name, 4, "$name: fitbit_getDataFromLeaderboard() ".$hash->{USERID};
   return undef if( !defined($hash->{IODev}) );
 
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getDataFromLeaderboard(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+
   HttpUtils_NonblockingGet({
     url => "https://api.fitbit.com/1/user/-/friends/leaderboard.json",
     timeout => 30,
@@ -1294,13 +1332,13 @@ sub fitbit_getUserWeight($) {
   my ($hash) = @_;
   my $name = $hash->{NAME};
   my $userID = $hash->{USERID};
-  
+
   Log3 $name, 5, "$name: fitbit_getUserWeight() ".$hash->{USERID};
   return undef if( !defined($hash->{IODev}) );
 
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getUserWeight(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+
   my $now = substr(TimeNow(),0,10);
   HttpUtils_NonblockingGet({
     url => "https://api.fitbit.com/1/user/-/body/log/weight/date/$now.json",
@@ -1311,7 +1349,7 @@ sub fitbit_getUserWeight($) {
     type => 'userWeight',
     callback => \&fitbit_Dispatch,
   });
-   
+
   $hash->{LAST_POLL} = TimeNow();
   readingsSingleUpdate( $hash, ".poll", gettimeofday(), 0 );
   return undef;
@@ -1322,13 +1360,13 @@ sub fitbit_getUserDailyActivitySummary($) {
   my ($hash) = @_;
   my $name = $hash->{NAME};
   my $userID = $hash->{USERID};
-  
+
   Log3 $name, 4, "$name: fitbit_getUserDailyActivitySummary() ".$hash->{USERID};
   return undef if( !defined($hash->{IODev}) );
 
   my $token = fitbit_decrypt( $hash->{IODev}->{helper}{token} );
   Log3 $name, 5, "$name: fitbit_getUserDailyActivitySummary(): Use token from I/O Dev $hash->{IODev}->{NAME}";
-  
+
   my $now = substr(TimeNow(),0,10);
   HttpUtils_NonblockingGet({
     url => "https://api.fitbit.com/1/user/-/activities/date/$now.json",
@@ -1339,7 +1377,7 @@ sub fitbit_getUserDailyActivitySummary($) {
     type => 'userDailyActivitySummary',
     callback => \&fitbit_Dispatch,
   });
-   
+
   $hash->{LAST_POLL} = TimeNow();
   readingsSingleUpdate( $hash, ".poll", gettimeofday(), 0 );
   return undef;
@@ -1353,14 +1391,14 @@ sub fitbit_Dispatch($$$) {
   my $name = $hash->{NAME};
 
   Log3 $name, 4, "$name: fitbit_Dispatch() ".$param->{type};
-  
+
   if( $err ) {
     Log3 $name, 1, "$name: fitbit_Dispatch($param->{type}): http request failed: type $param->{type} - $err";
   }
   elsif( $data ) {
     $data =~ s/\n//g;
     #Log3 $name, 5, "$name: fitbit_Dispatch($param->{type}): http returned: ".Dumper($data);
-    
+
     if( $data !~ /{.*}/ ) {
       Log3 $name, 1, "$name: fitbit_Dispatch($param->{type}): invalid json detected: >>$data<< " . $param->{type} if($data ne "[]");
       return undef;
@@ -1395,6 +1433,9 @@ sub fitbit_Dispatch($$$) {
     elsif( $param->{type} eq 'sleepLog' ) {
       fitbit_parseSleepLog($hash, $json);
     }
+    elsif( $param->{type} eq 'activity7d' ) {
+      fitbit_parseActivityLog($hash, $json);
+    }
   }
 }
 
@@ -1420,7 +1461,7 @@ sub fitbit_parseProperties($$) {
   readingsBeginUpdate($hash);
   readingsBulkUpdateIfChanged( $hash, "batteryLevel", lc($detail->{battery}), 1 );
   readingsBulkUpdateIfChanged( $hash, "lastSyncTime", $detail->{lastSyncTime}, 1 );
-  
+
   if($detail->{battery} eq "Low" || $detail->{battery} eq "Empty") {
     readingsBulkUpdateIfChanged( $hash, "battery", lc($detail->{battery}), 1 );
   } else {
@@ -1447,7 +1488,7 @@ sub fitbit_parseAlarms($$) {
     $alarmCount++;
     $weekDays = undef;
     Log3 $name, 5, "$name: fitbit_parseAlarms JSON Dump: ".Dumper($item);
-    
+
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_alarmId", $item->{alarmId}, 1 );
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_deleted", $item->{deleted}, 1 );
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_enabled", $item->{enabled}, 1 );
@@ -1457,7 +1498,7 @@ sub fitbit_parseAlarms($$) {
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_syncedToDevice", $item->{syncedToDevice}, 1 );
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_time", $item->{time}, 1 );
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_vibe", $item->{vibe}, 1 );
-    
+
     foreach my $day (@{$item->{weekDays}}) {
       Log3 $name, 5, "$name: fitbit_parseAlarms Found day $day...";
       $weekDays .= substr($day,0,2) . ",";
@@ -1466,11 +1507,11 @@ sub fitbit_parseAlarms($$) {
     readingsBulkUpdateIfChanged( $hash, "alarm".$alarmCount."_weekDays", $weekDays, 1 ) if(defined($weekDays));
   }
   Log3 $name, 5, "$name: fitbit_parseAlarms There is/are $alarmCount alarm(s)...";
-  
-  
+
+
   readingsBulkUpdateIfChanged( $hash, "alarmCount", $alarmCount, 1 );
   readingsEndUpdate($hash,1);
-  
+
   #remove old alarms....
   for(my $i=$alarmCount+1;$i<10;$i++) {
     Log3 $name, 5, "$name: fitbit_parseAlarms remove old alarm $i";
@@ -1528,13 +1569,13 @@ sub fitbit_parseUserDailyActivitySummary($$) {
   readingsBulkUpdateIfChanged( $hash, "summary_lightlyActiveMinutes", $json->{summary}->{lightlyActiveMinutes}, 1 );
   readingsBulkUpdateIfChanged( $hash, "summary_elevation", $json->{summary}->{elevation}, 1 );
   readingsBulkUpdateIfChanged( $hash, "summary_floors", $json->{summary}->{floors}, 1 );
-  
+
   readingsBulkUpdateIfChanged( $hash, "goals_steps", $json->{goals}->{steps}, 1 );
   readingsBulkUpdateIfChanged( $hash, "goals_caloriesOut", $json->{goals}->{caloriesOut}, 1 );
   readingsBulkUpdateIfChanged( $hash, "goals_distance", $json->{goals}->{distance}, 1 );
   readingsBulkUpdateIfChanged( $hash, "goals_activeMinutes", $json->{goals}->{activeMinutes}, 1 );
   readingsBulkUpdateIfChanged( $hash, "goals_floors", $json->{goals}->{floors}, 1 );
-  
+
   foreach my $item (@{$json->{summary}->{distances}}) {
     readingsBulkUpdateIfChanged( $hash, "summary_distances_$item->{activity}", $item->{distance}, 1 );
   }
@@ -1587,11 +1628,16 @@ sub fitbit_parseSleepLog($$) {
   readingsBulkUpdateIfChanged( $hash, "sleep_summary_totalMinutesAsleep", $json->{summary}->{totalMinutesAsleep}, 1 ) if($json->{summary}->{totalMinutesAsleep} > 0);
   readingsBulkUpdateIfChanged( $hash, "sleep_summary_totalSleepRecords", $json->{summary}->{totalSleepRecords}, 1 ) if($json->{summary}->{totalSleepRecords} > 0);
   readingsBulkUpdateIfChanged( $hash, "sleep_summary_totalTimeInBed", $json->{summary}->{totalTimeInBed}, 1 ) if($json->{summary}->{totalTimeInBed} > 0);
-  
+
+  readingsBulkUpdateIfChanged( $hash, "sleep_summary_total_minutes_deep", $json->{summary}->{stages}->{deep}, 1 ) if($json->{summary}->{stages}->{deep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "sleep_summary_total_minutes_light", $json->{summary}->{stages}->{light}, 1 ) if($json->{summary}->{stages}->{light} > 0);
+  readingsBulkUpdateIfChanged( $hash, "sleep_summary_total_minutes_rem", $json->{summary}->{stages}->{rem}, 1 ) if($json->{summary}->{stages}->{rem} > 0);
+  readingsBulkUpdateIfChanged( $hash, "sleep_summary_total_minutes_wake", $json->{summary}->{stages}->{wake}, 1 ) if($json->{summary}->{stages}->{wake} > 0);
+
   foreach my $item (@{$json->{sleep}}) {
     $sleepCount++;
     Log3 $name, 5, "$name: fitbit_parseSleepLog JSON Dump: ".Dumper($item);
-    
+
     readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_efficiency", $item->{efficiency}, 1 );
     readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_duration", $item->{duration}/1000/60, 1 );    #convert milisec. to min.
     readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_endTime", $item->{endTime}, 1 );
@@ -1603,15 +1649,23 @@ sub fitbit_parseSleepLog($$) {
     readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_startTime", $item->{startTime}, 1 );
     readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_timeInBed", $item->{timeInBed}, 1 );
     readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_type", $item->{type}, 1 );
-    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_asleepCount", $item->{levels}->{summary}->{asleep}->{count}, 1 );
-    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_asleepMinutes", $item->{levels}->{summary}->{asleep}->{minutes}, 1 );
-    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_awakeCount", $item->{levels}->{summary}->{awake}->{count}, 1 );
-    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_awakeMinutes", $item->{levels}->{summary}->{awake}->{minutes}, 1 );
-    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_restlessCount", $item->{levels}->{summary}->{restless}->{count}, 1 );
-    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_restlessMinutes", $item->{levels}->{summary}->{restless}->{minutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_deepsleep_count", $item->{levels}->{summary}->{deep}->{count}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_deepsleep_minutes", $item->{levels}->{summary}->{deep}->{minutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_deepsleep_30DayAvg", $item->{levels}->{summary}->{deep}->{thirtyDayAvgMinutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_remsleep_count", $item->{levels}->{summary}->{rem}->{count}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_remsleep_minutes", $item->{levels}->{summary}->{rem}->{minutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_remsleep_30DayAvg", $item->{levels}->{summary}->{rem}->{thirtyDayAvgMinutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_lightsleep_count", $item->{levels}->{summary}->{light}->{count}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_lightsleep_minutes", $item->{levels}->{summary}->{light}->{minutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_lightsleep_30DayAvg", $item->{levels}->{summary}->{light}->{thirtyDayAvgMinutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_wake_count", $item->{levels}->{summary}->{wake}->{count}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_wake_minutes", $item->{levels}->{summary}->{wake}->{minutes}, 1 );
+    readingsBulkUpdateIfChanged( $hash, "sleep".$sleepCount."_summary_wake_30DayAvg", $item->{levels}->{summary}->{wake}->{thirtyDayAvgMinutes}, 1 );
+
+
   }
   Log3 $name, 4, "$name: fitbit_parseSleepLog There is/are $sleepCount sleep(s)...";
-  
+
   #remove old sleeps....
   for(my $i=$sleepCount+1;$i<10;$i++) {
     Log3 $name, 5, "$name: fitbit_parseSleepLog remove old sleep $i";
@@ -1620,15 +1674,75 @@ sub fitbit_parseSleepLog($$) {
   readingsEndUpdate($hash,1);
 }
 
+
+#Used by Subtype: USER
+sub fitbit_parseActivityLog($$) {
+  my ($hash, $json) = @_;
+  my $name = $hash->{NAME};
+
+  Log3 $name, 4, "$name: fitbit_parseActivityLog()";
+
+  $hash->{LAST_DATA} = TimeNow();
+  Log3 $name, 5, "$name: fitbit_parseActivityLog JSON Dump: ".Dumper($json);
+  readingsBeginUpdate($hash);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_outofrange_minutes", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[0]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_outofrange_min", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[0]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_outofrange_max", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[0]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_outofrange_calories", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[0]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_fatburn_minutes", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[1]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_fatburn_min", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[1]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_fatburn_max", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[1]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_fatburn_calories", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[1]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_cardio_minutes", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[2]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_cardio_min", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[2]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_cardio_max", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[2]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_cardio_calories", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[2]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_peak_minutes", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[3]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_peak_min", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[3]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_peak_max", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[3]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_peak_calories", $json->{'activities-heart'}[0]->{value}->{heartRateZones}[3]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_today_resting_heartrate", $json->{'activities-heart'}[0]->{value}->{restingHeartRate}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_outofrange_minutes", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[0]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_outofrange_min", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[0]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_outofrange_max", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[0]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_outofrange_calories", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[0]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_fatburn_minutes", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[1]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_fatburn_min", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[1]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_fatburn_max", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[1]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_fatburn_calories", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[1]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_cardio_minutes", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[2]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_cardio_min", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[2]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_cardio_max", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[2]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_cardio_calories", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[2]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_peak_minutes", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[3]->{minutes}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_peak_min", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[3]->{min}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_peak_max", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[3]->{max}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_peak_calories", $json->{'activities-heart'}[1]->{value}->{heartRateZones}[3]->{caloriesOut}, 1 ); # if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsBulkUpdateIfChanged( $hash, "activity_hr_yesterday_resting_heartrate", $json->{'activities-heart'}[1]->{value}->{restingHeartRate}, 1 ); #if($json->{summary}->{totalMinutesAsleep} > 0);
+
+  readingsEndUpdate($hash,1);
+}
+
+
 #Check if JSON hat an "error" Item
 sub fitbit_parseJsonForError($$) {
   my ($hash, $json) = @_;
   my $name = $hash->{NAME};
   my ($errorType, $errorMsg) = undef;
-  
+
   Log3 $name, 4, "$name: fitbit_parseHttpDataError()";
   #Log3 $name, 5, "$name: fitbit_parseHttpDataError: JSON Dump: " . Dumper($json);
-  
+
   if (ref($json) eq 'HASH') {
     if (defined($json->{errors}->[0])) {
       $errorType = $json->{errors}->[0]->{errorType} if(defined($json->{errors}->[0]->{errorType}));
@@ -1638,7 +1752,7 @@ sub fitbit_parseJsonForError($$) {
       return "error";
     }
   }
-  
+
   return undef;
 }
 
@@ -1648,10 +1762,10 @@ sub fitbit_parseHttpHeader($$) {
   my ($hash, $header) = @_;
   my $name = $hash->{NAME};
   my ($iodevName, $limit, $remaining, $reset) = undef;
-  
+
   Log3 $name, 4, "$name: fitbit_ParseHttpHeader()";
   #Log3 $name, 5, "$name: fitbit_ParseHttpHeader: $header";
-  
+
   if(defined($hash->{IODev}->{NAME})) {
     Log3 $name, 4, "$name: fitbit_ParseHttpHeader: I/O device is " . $hash->{IODev}->{NAME};
 	$iodevName = $hash->{IODev}->{NAME};
@@ -1664,30 +1778,30 @@ sub fitbit_parseHttpHeader($$) {
     Log3 $name, 1, "$name: fitbit_parseHttpHeader: HTTP 401 (Unauthorized) found. Maybe a wrong token?";
     return "error";
   }
-  
+
   #Fitbit-Rate-Limit-Limit: The quota number of calls.
   if ($header =~ /Fitbit-Rate-Limit-Limit: (\d*)/) {
     $limit = $1;
     #Log3 $name, 4, "$name: fitbit_parseHttpHeader: $1";
   }
-  
+
   #Fitbit-Rate-Limit-Remaining: The number of calls remaining before hitting the rate limit.
   if ($header =~ /Fitbit-Rate-Limit-Remaining: (\d*)/) {
     $remaining = $1;
     #Log3 $name, 4, "$name: fitbit_parseHttpHeader: $1";
   }
-  
+
   #Fitbit-Rate-Limit-Reset: The number of seconds until the rate limit resets.
   if ($header =~ /Fitbit-Rate-Limit-Reset: (\d*)/) {
     $reset = $1;
     #Log3 $name, 4, "$name: fitbit_parseHttpHeader: $1";
   }
-  
+
   fhem("setreading $iodevName rateLimitLimit $limit", 1) if(defined($iodevName) && defined($limit));
   fhem("setreading $iodevName rateLimitRemaining $remaining", 1) if(defined($iodevName) && defined($remaining));
   fhem("setreading $iodevName rateLimitReset $reset", 1) if(defined($iodevName) && defined($reset));
 
-  
+
   if ($remaining > 1 ) {
 	return undef;
   } else {
@@ -1719,7 +1833,7 @@ sub fitbit_parseHttpHeader($$) {
    my $decoded;
 
    return $encoded if( $encoded !~ /crypt:/ );
-  
+
    $encoded = $1 if( $encoded =~ /crypt:(.*)/ );
 
    for my $char (map { pack('C', hex($_)) } ($encoded =~ /(..)/g)) {
@@ -1782,7 +1896,7 @@ sub fitbit_parseHttpHeader($$) {
     <li>dateOfBirth - USER, FRIEND - Date of birth</li>
     <li>weight - USER, FRIEND - Weight from Leaderboard(USER and FRIEND) or fitbit weight log (USER)</li>
     <li>memberSince</li>
-    
+
     <li>battery - DEVICE - Indicator if the batteryLevel is low or empty</li>
     <li>alarm&lt;id&gt;_alarmId - DEVICE - Internal ID to identify the alarm timer</li>
     <li>alarm&lt;id&gt;_deleted - DEVICE - </li>
@@ -1794,12 +1908,12 @@ sub fitbit_parseHttpHeader($$) {
     <li>alarm&lt;id&gt;_time - DEVICE - Time to alert</li>
     <li>alarm&lt;id&gt;_vibe - DEVICE - </li>
     <li>alarmCount - DEVICE - How many alarms are configured for this device</li>
-    
+
     <li>leaderboard_summary_steps - USER, FRIEND - Leaderboard summary of steps from the last 7 days</li>
     <li>leaderboard_average_steps - USER, FRIEND - The daily average steps calculated from the past</li>
     <li>leaderboard_lifetime_steps - USER, FRIEND - </li>
     <li>leaderboard_rank_steps - USER, FRIEND - Leaderboard rank position</li>
-    
+
     <li>summary_steps - USER - </li>
     <li>summary_fairlyActiveMinutes - USER - </li>
     <li>summary_marginalCalories - USER - </li>
@@ -1809,7 +1923,7 @@ sub fitbit_parseHttpHeader($$) {
     <li>summary_sedentaryMinutes - USER - </li>
     <li>summary_veryActiveMinutes - USER - </li>
     <li>summary_lightlyActiveMinutes - USER - </li>
-    
+
     <li>goals_steps - USER - </li>
     <li>goals_caloriesOut - USER - </li>
     <li>goals_distance - USER - </li>
@@ -1818,13 +1932,13 @@ sub fitbit_parseHttpHeader($$) {
     <li>goals_bedtime - USER - </li>
     <li>goals_sleepMinDuration - USER - </li>
     <li>goals_wakeupTime - USER - </li>
-    
+
     <li>bodyFat_fat - USER - </li>
     <li>bodyFat_bmi - USER - </li>
     <li>bodyFat_weight - USER - </li>
     <li>bodyFat_dateTime - USER - </li>
     <li>summary_distances_ - USER - </li>
-    
+
     <li>sleep&lt;id&gt;_efficiency - USER - </li>
     <li>sleep&lt;id&gt;_duration - USER - </li>
     <li>sleep&lt;id&gt;_endTime - USER - </li>
