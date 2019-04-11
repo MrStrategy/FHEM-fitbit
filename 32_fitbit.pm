@@ -1473,6 +1473,10 @@ sub fitbit_parseProperties($$) {
   my $detail = "";
   Log3 $name, 4, "$name: fitbit_parseProperties()";
 
+  if (not defined $json || not ref($json) eq "HASH" ){
+    Log3 $name, 1, "$name: fitbit_parseProperties(): Not a valid JSON.";
+    return undef;
+  }
   #parse
   #Look for the right device. JSON could have more than one device if there are more devices connected to account.
   foreach my $item (@$json) {
