@@ -74,6 +74,119 @@ sub fitbit_Initialize($) {
   $hash->{AttrList} .= $readingFnAttributes;
 }
 
+
+# Used by Subtype: ACCOUNT
+sub fitbit_setWeight($$$) {
+  my ($hash, $weight, $withTime) = @_;
+  my $name = $hash->{NAME};
+
+
+  my $token = fitbit_decrypt( $hash->{helper}{token} );
+  Log3 $name, 5, "$name: fitbit_setWeight()";
+
+  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+  $year = $year+1900;
+  $mon = $mon+1;
+
+  my $params = "weight=$weight&date=$year-$mon-$mday";
+
+  if ($withTime) {
+    $params.="&time=$hour:$min:$sec";
+  }
+
+  my $url = "https://api.fitbit.com/1/user/-/body/log/weight.json/";
+
+  Log3 $name, 4, "$name: fitbit_setWeight() - Sending data to fitbit web api.";
+  Log3 $name, 4, "FHEM -> fitbit URL: " . $url;
+  Log3 $name, 4, "FHEM -> fitbit Params: " . $params;
+
+
+  #ToDo: Nonblocking?!
+  my ($err,$data) = HttpUtils_BlockingGet({
+    url => $url,
+    timeout => 10,
+    noshutdown => 1,
+    data => $params,
+    method  => 'POST',
+    header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
+  });
+
+
+  Log3 $name, 4, "$name: fitbit_setWeight() - Received data from fitbit web api.";
+  Log3 $name, 4, "fitbit -> FHEM: " . $data;
+  Log3 $name, 5, '$err: ' . $err;
+
+	if (!defined($data)) {
+		return undef;
+	}
+
+	my $d  = decode_json($data) if( !$err );
+	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+
+
+    return $d->{weightLog}->{logId};
+
+}
+
+
+
+# Used by Subtype: ACCOUNT
+sub fitbit_setFat($$$) {
+  my ($hash, $fat, $withTime) = @_;
+  my $name = $hash->{NAME};
+
+
+  my $token = fitbit_decrypt( $hash->{helper}{token} );
+  Log3 $name, 5, "$name: fitbit_setFat()";
+
+  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
+  $year = $year+1900;
+  $mon = $mon+1;
+
+  my $params = "fat=$fat&date=$year-$mon-$mday";
+
+  if ($withTime) {
+    $params.="&time=$hour:$min:$sec";
+  }
+
+  my $url = "https://api.fitbit.com/1/user/-/body/log/fat.json/";
+
+  Log3 $name, 4, "$name: fitbit_setFat() - Sending data to fitbit web api.";
+  Log3 $name, 4, "FHEM -> fitbit URL: " . $url;
+  Log3 $name, 4, "FHEM -> fitbit Params: " . $params;
+
+
+  #ToDo: Nonblocking?!
+  my ($err,$data) = HttpUtils_BlockingGet({
+    url => $url,
+    timeout => 10,
+    noshutdown => 1,
+    data => $params,
+    method  => 'POST',
+    header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
+  });
+
+
+  Log3 $name, 4, "$name: fitbit_setFat() - Received data from fitbit web api.";
+  Log3 $name, 4, "fitbit -> FHEM: " . $data;
+  Log3 $name, 5, '$err: ' . $err;
+
+	if (!defined($data)) {
+		return undef;
+	}
+
+	my $d  = decode_json($data) if( !$err );
+	Log3 $name, 5, 'Decoded: ' . Dumper($d);
+
+
+    return $d->{fatLog}->{logId};
+
+}
+
+
+
+
+
 # Used by Subtype: ACCOUNT, DEVICE, USER, FRIEND
 sub fitbit_Define($$) {
   my ($hash, $def) = @_;
@@ -284,7 +397,7 @@ sub fitbit_Set($$@) {
   Log3 $name, 4, "$name fitbit_Set()";
 
   if( $hash->{SUBTYPE} eq "ACCOUNT") {
-    $list = "getFriends:noArg setWeight setFat";
+    $list = "getFriends:noArg setWeight setFat setWeight_WithTime setFat_WithTime";
     if($cmd eq "getFriends") {
       #Add friends
         if( !defined( $attr{$name}{createFriends} ) ||  $attr{$name}{createFriends} eq '0' ) {
@@ -319,12 +432,20 @@ sub fitbit_Set($$@) {
 
     }
 
+    if($cmd eq "setWeight_WithTime") {
+      return "logged weight data with log-id " . fitbit_setWeight($hash, $arg[0], 1);
+    }
+
+    if($cmd eq "setFat_WithTime") {
+      return "logged fat data with log-id " . fitbit_setFat($hash, $arg[0], 1);
+    }
+
     if($cmd eq "setWeight") {
-      return "logged weight data with log-id " . fitbit_setWeight($hash, $arg[0]);
+      return "logged weight data with log-id " . fitbit_setWeight($hash, $arg[0], 0);
     }
 
     if($cmd eq "setFat") {
-      return "logged fat data with log-id " . fitbit_setFat($hash, $arg[0]);
+      return "logged fat data with log-id " . fitbit_setFat($hash, $arg[0], 0);
     }
 
     else {
@@ -925,102 +1046,9 @@ sub fitbit_getDeviceDetail($) {
 }
 
 
-# Used by Subtype: ACCOUNT
-sub fitbit_setWeight($$) {
-  my ($hash, $weight) = @_;
-  my $name = $hash->{NAME};
 
 
-  my $token = fitbit_decrypt( $hash->{helper}{token} );
-  Log3 $name, 5, "$name: fitbit_setWeight()";
 
-  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
-  $year = $year+1900;
-  $mon = $mon+1;
-
-  my $params = "weight=$weight&date=$year-$mon-$mday&time=$hour:$min:$sec";
-  my $url = "https://api.fitbit.com/1/user/-/body/log/weight.json/";
-
-  Log3 $name, 4, "$name: fitbit_setWeight() - Sending data to fitbit web api.";
-  Log3 $name, 4, "FHEM -> fitbit URL: " . $url;
-  Log3 $name, 4, "FHEM -> fitbit Params: " . $params;
-
-
-  #ToDo: Nonblocking?!
-  my ($err,$data) = HttpUtils_BlockingGet({
-    url => $url,
-    timeout => 10,
-    noshutdown => 1,
-    data => $params,
-    method  => 'POST',
-    header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
-  });
-
-
-  Log3 $name, 4, "$name: fitbit_setWeight() - Received data from fitbit web api.";
-  Log3 $name, 4, "fitbit -> FHEM: " . $data;
-  Log3 $name, 5, '$err: ' . $err;
-
-	if (!defined($data)) {
-		return undef;
-	}
-
-	my $d  = decode_json($data) if( !$err );
-	Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-
-    return $d->{weightLog}->{logId};
-
-}
-
-
-# Used by Subtype: ACCOUNT
-sub fitbit_setFat($$) {
-  my ($hash, $fat) = @_;
-  my $name = $hash->{NAME};
-
-
-  my $token = fitbit_decrypt( $hash->{helper}{token} );
-  Log3 $name, 5, "$name: fitbit_setFat()";
-
-  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime();
-  $year = $year+1900;
-  $mon = $mon+1;
-
-  my $params = "fat=$fat&date=$year-$mon-$mday&time=$hour:$min:$sec";
-  my $url = "https://api.fitbit.com/1/user/-/body/log/fat.json/";
-
-  Log3 $name, 4, "$name: fitbit_setFat() - Sending data to fitbit web api.";
-  Log3 $name, 4, "FHEM -> fitbit URL: " . $url;
-  Log3 $name, 4, "FHEM -> fitbit Params: " . $params;
-
-
-  #ToDo: Nonblocking?!
-  my ($err,$data) = HttpUtils_BlockingGet({
-    url => $url,
-    timeout => 10,
-    noshutdown => 1,
-    data => $params,
-    method  => 'POST',
-    header => {"Authorization" => 'Bearer '. $token, "Accept-Locale" => 'de_DE'},
-  });
-
-
-  Log3 $name, 4, "$name: fitbit_setFat() - Received data from fitbit web api.";
-  Log3 $name, 4, "fitbit -> FHEM: " . $data;
-  Log3 $name, 5, '$err: ' . $err;
-
-	if (!defined($data)) {
-		return undef;
-	}
-
-	my $d  = decode_json($data) if( !$err );
-	Log3 $name, 5, 'Decoded: ' . Dumper($d);
-
-
-    return $d->{fatLog}->{logId};
-
-}
 
 
 
